@@ -44,7 +44,7 @@ include_guard()
 #    function to grow too. That's the justification for factoring it out.
 #
 #]]
-function(nwx_find_python)
+macro(nwx_find_python)
     # We want the first find to be verbose, and all others to be quite. This is
     # why we use short-circuit logic to avoid subsequent calls to find_package
     # (as opposed to relying on find_package's short-circuit logic)
@@ -54,7 +54,7 @@ function(nwx_find_python)
 
     find_package(Python3 COMPONENTS Interpreter Development)
     find_package(Python COMPONENTS Interpreter Development)
-endfunction()
+endmacro()
 
 #[[[ Wraps the process of finding Pybind11
 #
@@ -109,15 +109,24 @@ function(nwx_add_pybind11_module npm_module_name)
     if(NOT "${BUILD_PYBIND11_PYBINDINGS}")
         return()
     endif()
-    if("${NWX_MODULE_DIRECTORY}" STREQUAL "")
-        message(
-            FATAL_ERROR "NWX_MODULE_DIRECTORY must be set to the directory "
-                        "where you would like the Python modules installed."
-        )
-    endif()
 
     nwx_find_pybind11()
     nwx_find_python()
+
+    # Generates <root>/bin/python3
+    cmake_path(REMOVE_FILENAME Python3_EXECUTABLE OUTPUT_VARIABLE _nap_pyroot)
+    # Back out to <root>
+    cmake_path(GET Python3_EXECUTABLE PARENT_PATH _nap_pyroot)
+    cmake_path(GET _nap_pyroot PARENT_PATH _nap_pyroot)
+    # Get the sitedir with the Python root directory removed
+    cmake_path(RELATIVE_PATH Python3_SITELIB BASE_DIRECTORY "${_nap_pyroot}" OUTPUT_VARIABLE _nap_pysitelib)
+
+    if("${NWX_MODULE_DIRECTORY}" STREQUAL "")
+        # include(GNUInstallDirs)
+        set(NWX_MODULE_DIRECTORY "../../../${_nap_pysitelib}" CACHE PATH "Relative path to install Python bindings" FORCE)
+    endif()
+
+    message(DEBUG "NWX_MODULE_DIRECTORY=${NWX_MODULE_DIRECTORY}")
 
     set(_npm_py_target_name "py_${npm_module_name}")
     cmaize_add_library(
@@ -206,7 +215,8 @@ function(nwx_python_path _npp_path)
 
     # N.B. This presently assumes we're building the Python submodules we
     #      need or they are installed in ${NWX_MODULE_DIRECTORY}
-    set(_npp_py_path "PYTHONPATH=${NWX_MODULE_DIRECTORY}")
+    message(DEBUG "Environment PYTHONPATH=$ENV{PYTHONPATH}")
+    set(_npp_py_path "PYTHONPATH=${NWX_MODULE_DIRECTORY}:$ENV{PYTHONPATH}")
     set(_npp_py_path "${_npp_py_path}:${CMAKE_BINARY_DIR}")
     foreach(_npp_submod ${_npp_SUBMODULES})
         set(_npp_dep_dir "")
@@ -222,6 +232,7 @@ function(nwx_python_path _npp_path)
     if(NOT "${NWX_PYTHON_EXTERNALS}" STREQUAL "")
         set(_npp_py_path "${_npp_py_path}:${NWX_PYTHON_EXTERNALS}")
     endif()
+    message(DEBUG "Modified PYTHONPATH=${_npp_py_path}")
     set("${_npp_path}" "${_npp_py_path}" PARENT_SCOPE)
 endfunction()
 
